@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 
 // --- Firebase Imports (Keeping the structure as required, although data fetching is removed) ---
 import { initializeApp } from 'firebase/app';
+// FIXED: Removed setLogLevel from the import, as it is not an exported function from firebase/auth 
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
@@ -34,18 +35,14 @@ const NAV_PAGES = {
 const ImageCarousel = ({ photos }) => {
     const [activeIndex, setActiveIndex] = useState(0);
 
-    // Function to go to the next slide
+    // Function to go to the next slide (Only logic needed for automatic advance)
     const nextSlide = useCallback(() => {
         setActiveIndex((prevIndex) => (prevIndex + 1) % photos.length);
     }, [photos.length]);
 
-    // Function to go to the previous slide
-    const prevSlide = useCallback(() => {
-        setActiveIndex((prevIndex) => (prevIndex - 1 + photos.length) % photos.length);
-    }, [photos.length]);
-
     // Auto-advance logic
     useEffect(() => {
+        // Set the interval for auto-advance
         const intervalId = setInterval(nextSlide, 4500); // Auto-advance every 4.5 seconds
         return () => clearInterval(intervalId);
     }, [nextSlide]);
@@ -57,19 +54,18 @@ const ImageCarousel = ({ photos }) => {
             </h2>
             
             <div 
+                // Removed onMouseEnter/onMouseLeave since manual pausing is not desired
                 className="relative w-full max-w-4xl mx-auto rounded-xl overflow-hidden shadow-2xl bg-gray-800"
-                // Pause auto-play on hover
-                onMouseEnter={() => clearInterval(window.carouselInterval)}
-                onMouseLeave={() => window.carouselInterval = setInterval(nextSlide, 4500)}
             >
                 {/* Image Display */}
-                <div className="aspect-video w-full">
+                <div className="aspect-video w-full bg-black">
                     {photos.map((photo, index) => (
                         <img
                             key={photo.id}
                             src={photo.url}
                             alt={photo.alt}
-                            className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-700 ${
+                            // Changed object-cover to object-contain to ensure the full image is visible
+                            className={`absolute inset-0 w-full h-full object-contain transition-opacity duration-700 ${
                                 index === activeIndex ? 'opacity-100' : 'opacity-0'
                             }`}
                             onError={(e) => {
@@ -80,34 +76,20 @@ const ImageCarousel = ({ photos }) => {
                     ))}
                 </div>
 
-                {/* Left Arrow Button */}
-                <button
-                    onClick={prevSlide}
-                    className="absolute left-0 top-1/2 -translate-y-1/2 p-3 md:p-4 bg-black/40 hover:bg-black/60 text-white rounded-r-lg transition-colors z-10"
-                    aria-label="Previous slide"
-                >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
-                </button>
-
-                {/* Right Arrow Button */}
-                <button
-                    onClick={nextSlide}
-                    className="absolute right-0 top-1/2 -translate-y-1/2 p-3 md:p-4 bg-black/40 hover:bg-black/60 text-white rounded-l-lg transition-colors z-10"
-                    aria-label="Next slide"
-                >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
-                </button>
+                {/* Removed Left Arrow Button */}
+                {/* Removed Right Arrow Button */}
                 
-                {/* Slide Indicators */}
+                {/* Slide Indicators (Now purely visual, non-interactive) */}
                 <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex space-x-2 z-10">
                     {photos.map((_, index) => (
-                        <button
+                        <div
                             key={index}
-                            onClick={() => setActiveIndex(index)}
+                            // Removed onClick to enforce automatic-only mode
                             className={`h-2 w-2 rounded-full transition-all duration-300 ${
                                 index === activeIndex ? 'bg-white w-4' : 'bg-gray-400 opacity-50'
                             }`}
-                            aria-label={`Go to slide ${index + 1}`}
+                            role="status"
+                            aria-label={`Slide ${index + 1} of ${photos.length}`}
                         />
                     ))}
                 </div>
@@ -152,6 +134,9 @@ export default function App() {
                 const app = initializeApp(firebaseConfig);
                 const firestoreDb = getFirestore(app);
                 const firebaseAuth = getAuth(app);
+                
+                // REMOVED: setLogLevel('debug'); - This caused the compilation error.
+                
                 setDb(firestoreDb);
                 setAuth(firebaseAuth);
 
@@ -159,12 +144,20 @@ export default function App() {
                 const unsubscribe = onAuthStateChanged(firebaseAuth, (user) => {
                     if (user) {
                         setUserId(user.uid);
+                        console.log("User authenticated with UID:", user.uid);
                     } else {
+                        console.log("No user found. Attempting sign-in...");
                         // Sign in anonymously if no token, otherwise use the token
                         if (initialAuthToken) {
-                            signInWithCustomToken(firebaseAuth, initialAuthToken).catch(console.error);
+                            signInWithCustomToken(firebaseAuth, initialAuthToken)
+                                // IMPROVED: Added explicit success/error logging for debugging
+                                .then(() => console.log("Signed in with custom token successfully."))
+                                .catch((error) => console.error("Error signing in with custom token:", error));
                         } else {
-                            signInAnonymously(firebaseAuth).catch(console.error);
+                            signInAnonymously(firebaseAuth)
+                                // IMPROVED: Added explicit success/error logging for debugging
+                                .then(() => console.log("Signed in anonymously successfully."))
+                                .catch((error) => console.error("Error signing in anonymously:", error));
                         }
                     }
                 });
@@ -173,6 +166,8 @@ export default function App() {
             } catch (error) {
                 console.error("Firebase initialization failed:", error);
             }
+        } else {
+            console.error("Firebase configuration (__firebase_config) is missing.");
         }
     }, []);
     // --- End Firebase Initialization ---
